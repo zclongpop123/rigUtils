@@ -4,37 +4,56 @@
 #      time: Thu Sep 14 10:19:32 2017
 #========================================
 import pymel.core as pm
-import ik, attach, streatch
+import ik
 #--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-NAME_SPACE = 'XXnamespaceXX'
 
+def create_joints(start_jnt, end_jnt, namespace, description, count, offset=1):
+    '''
+    Name:
+        [namespace][description]_jnt_[0-count]
 
-def create_twist_joints(start_jnt, end_jnt, count=6):
+    Position:
+                |----- [count] -----|
+        [start] O-->O-->O-->O-->O-->O [end]
+                |_____ [offset] ____|
     '''
-    '''
+
     sp = pm.xform(start_jnt, q=True, ws=True, t=True)
     ep = pm.xform(end_jnt,   q=True, ws=True, t=True)
 
     #- create joints
-    twist_joints = list()
+    joints = list()
     for i in range(count):
-        jnt = pm.createNode('joint', name='{0}twist_jnt_{1}'.format(NAME_SPACE, i+1))
+        jnt = pm.createNode('joint', name='{0}{1}_jnt_{2}'.format(namespace, description, i+1))
 
         #- match positions
-        ps = sp[0] + (ep[0] - sp[0]) / (count-1) * i, sp[1] + (ep[1] - sp[1]) / (count-1) * i, sp[2] + (ep[2] - sp[2]) / (count-1) * i
+        ps = [ sp[x] + (ep[x] - sp[x]) / (count-1) * i * offset for x in range(3) ]
         pm.xform(jnt, ws=True, t=ps)
 
         #- save to list
-        twist_joints.append(jnt)
+        joints.append(jnt)
 
         #- parent
         if i:
-            pm.delete(pm.aimConstraint(jnt, twist_joints[i-1], aim=(1, 0, 0), u=(0, 0, 1), wut='objectrotation', wuo=start_jnt, wu=(0, 0, 1)))
-            pm.parent(jnt, twist_joints[i-1])
-            jnt.setAttr('jo'.format(jnt), 0, 0, 0)            
+            pm.delete(pm.aimConstraint(jnt, joints[i-1], aim=(1, 0, 0), u=(0, 0, 1), wut='objectrotation', wuo=start_jnt, wu=(0, 0, 1)))
+            pm.parent(jnt, joints[i-1])
+            jnt.setAttr('jo'.format(jnt), 0, 0, 0)
 
     #- freeze attributes
-    pm.makeIdentity(twist_joints[0], a=True, r=True)
+    pm.makeIdentity(joints[0], a=True, r=True)
+
+
+    return joints
+
+
+
+
+
+def create_twist_joints(start_jnt, end_jnt, namespace, count=6):
+    '''
+    '''
+    #- create joints
+    twist_joints = create_joints(start_jnt, end_jnt, namespace, 'twist', count)
 
     return twist_joints
 
@@ -42,20 +61,15 @@ def create_twist_joints(start_jnt, end_jnt, count=6):
 
 
 
-def create_noroll_joints(start_jnt, end_jnt, count=2, near_jnt=None):
+def create_noroll_joints(start_jnt, end_jnt, namespace, near_jnt=None):
     '''
     '''
-    noro_joints = create_twist_joints(start_jnt, end_jnt, count)
+    #- create joints
+    noro_joints = create_joints(start_jnt, end_jnt, namespace, 'noro', 2, 0.1)
 
-    for attr in ('tx', 'ty', 'tz'):
-        for jnt in noro_joints[1:]:
-            jnt.setAttr(attr, jnt.getAttr(attr) * 0.1)
-
+    #- match position
     if near_jnt:
         pm.delete(pm.pointConstraint(near_jnt, noro_joints[0]))
-
-    for i, jnt in enumerate(noro_joints):
-        jnt.rename('{0}noro_jnt_{1}'.format(NAME_SPACE, i+1))
 
     return noro_joints
 
@@ -63,14 +77,14 @@ def create_noroll_joints(start_jnt, end_jnt, count=2, near_jnt=None):
 
 
 
-def create_aux_joints(end_jnt):
+def create_aux_joints(start_jnt, end_jnt, namespace):
     '''
     '''
-    start_jnt = pm.PyNode(end_jnt).getParent()
-    aux_joints = create_noroll_joints(start_jnt, end_jnt, 3, end_jnt)
+    #- create joints
+    aux_joints = create_joints(start_jnt, end_jnt, namespace, 'aux', 3, 0.1)
 
-    for i, jnt in enumerate(aux_joints):
-        jnt.rename('{0}aux_jnt_{1}'.format(NAME_SPACE, i+1))
+    #- match position
+    pm.delete(pm.pointConstraint(end_jnt, aux_joints[0]))
 
     return aux_joints
 
@@ -78,34 +92,29 @@ def create_aux_joints(end_jnt):
 
 
 
-def create_twist_rig(start_jnt, end_jnt, count=6, use_aux=False, namespace=None):
+def create_twist_rig(start_jnt, end_jnt, namespace='XXnamespaceXX', count=6, use_aux=False):
     '''
     '''
-    if namespace:
-        global NAME_SPACE
-        NAME_SPACE = namespace
+    #--- Create Joints ---
+    tws_joints = create_twist_joints(start_jnt,  end_jnt, namespace, count)
+    nro_joints = create_noroll_joints(start_jnt, end_jnt, namespace, [start_jnt, end_jnt][use_aux])
+    aux_joints = use_aux and create_aux_joints(start_jnt, end_jnt, namespace)
 
-    #- Create Joints and ikHandles
-    tws_joints  = create_twist_joints(start_jnt, end_jnt, count)
-    tws_jointg  = pm.group(tws_joints[0], name='{0}twist_jng_0'.format(NAME_SPACE))
-    tws_ikhandl = pm.rename(ik.create_spline_ik(tws_joints[0], tws_joints[-1]), '{0}twist_ikl_0'.format(NAME_SPACE))
-    tws_ikcurve = pm.rename(pm.PyNode(tws_ikhandl.getCurve()).getParent(), '{0}twist_crv_0'.format(NAME_SPACE))
+    #--- Create IK-handles ---
 
-    if use_aux:
-        nro_joints = create_noroll_joints(start_jnt, end_jnt, 2, end_jnt)
-    else:
-        nro_joints = create_noroll_joints(start_jnt, end_jnt, 2, start_jnt)
-    nro_jointg  = pm.group(nro_joints[0], name='{0}noro_jng_0'.format(NAME_SPACE))
-    nro_ikhandl = pm.rename(ik.create_spline_ik(nro_joints[0], nro_joints[-1]), '{0}noro_ikl_0'.format(NAME_SPACE))
-    nro_ikcurve = pm.rename(pm.PyNode(nro_ikhandl.getCurve()).getParent(), '{0}noro_crv_0'.format(NAME_SPACE))
+    #- twist ikhandle
+    tws_ikhandl = pm.rename(ik.create_spline_ik(tws_joints[0], tws_joints[-1]), '{0}twist_ikl_0'.format(namespace))
+    tws_ikcurve = pm.rename(pm.PyNode(tws_ikhandl.getCurve()).getParent(), '{0}twist_crv_0'.format(namespace))
 
-    aux_joints  = use_aux and create_aux_joints(end_jnt)
-    aux_jointg  = use_aux and pm.group(aux_joints[0], name='{0}aux_jng_0'.format(NAME_SPACE))
-    aux_ikhandl = use_aux and pm.rename(ik.create_spline_ik(aux_joints[0], aux_joints[-1]), '{0}aux_ikl_0'.format(NAME_SPACE))
-    aux_ikcurve = use_aux and pm.rename(pm.PyNode(aux_ikhandl.getCurve()).getParent(), '{0}aux_crv_0'.format(NAME_SPACE))
-    aux_control = use_aux and pm.parent(pm.duplicate(aux_joints[0], name='{0}aux_ctj_0'.format(NAME_SPACE), po=True)[0], w=True)[0]
+    #- noroll ikhandle
+    nro_ikhandl = pm.rename(ik.create_spline_ik(nro_joints[0], nro_joints[-1]), '{0}noro_ikl_0'.format(namespace))
+    nro_ikcurve = pm.rename(pm.PyNode(nro_ikhandl.getCurve()).getParent(), '{0}noro_crv_0'.format(namespace))
 
-    #- set advance twist
+    #- aux ikhandle
+    aux_ikhandl = use_aux and pm.rename(ik.create_spline_ik(aux_joints[0], aux_joints[-1], nro_ikcurve), '{0}aux_ikl_0'.format(namespace))
+    aux_control = use_aux and pm.parent(pm.duplicate(aux_joints[0], name='{0}aux_ctj_0'.format(namespace), po=True)[0], w=True)[0]
+
+    #--- Set Advance Twist ---
     if use_aux:
         ik.set_ik_advance_twist(aux_ikhandl, nro_joints[0], aux_control)
         aux_joints[1].rx >> tws_ikhandl.twi
@@ -113,26 +122,18 @@ def create_twist_rig(start_jnt, end_jnt, count=6, use_aux=False, namespace=None)
         ik.set_ik_advance_twist(tws_ikhandl, nro_joints[0], start_jnt)
 
     #- bind noroll ik curves
-    if use_aux:
-        attach.connect_curve_points(aux_control, nro_ikcurve)
-        attach.connect_curve_points(aux_control, aux_ikcurve)
-    else:
-        attach.connect_curve_points(start_jnt, nro_ikcurve)
+    pm.parentConstraint([start_jnt, aux_control][use_aux], nro_ikcurve, mo=True)
 
     #- group and constraint joints
-    pm.parentConstraint(start_jnt, tws_jointg, mo=True)
+    twist_rig_grp = pm.createNode('transform')
     if use_aux:
-        pm.parentConstraint(start_jnt,   nro_jointg,  mo=True)
-        pm.parentConstraint(aux_control, aux_jointg,  mo=True)
-        pm.parentConstraint(end_jnt,     aux_control, mo=True)
+        pm.parentConstraint(start_jnt, twist_rig_grp)
+        pm.parentConstraint(end_jnt,   aux_control,   mo=True)
     else:
-        pm.parentConstraint(pm.listRelatives(start_jnt, p=True, path=True), nro_jointg, mo=True)
+        pm.parentConstraint(pm.listRelatives(start_jnt, p=True, path=True), twist_rig_grp)
 
-    #- Cleanup hierarchy
-    pm.group(tws_jointg,  nro_jointg,  use_aux and aux_jointg or None,
-             tws_ikhandl, nro_ikhandl, use_aux and aux_ikhandl or None,
-             tws_ikcurve, nro_ikcurve, use_aux and aux_ikcurve or None,
-             use_aux and aux_control or None)
-
-    #- 
-    NAME_SPACE = 'XXnamespaceXX'
+    pm.parent(tws_joints[0], nro_joints[0], use_aux and aux_joints[0] or None,
+              tws_ikhandl,   nro_ikhandl,   use_aux and aux_ikhandl   or None,
+              tws_ikcurve,   nro_ikcurve,
+              use_aux and aux_control or None, 
+              twist_rig_grp)
