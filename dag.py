@@ -4,14 +4,15 @@
 #      time: Tue Sep 19 14:40:48 2017
 #========================================
 import pymel.core as pm
+import maya.OpenMaya as OpenMaya
 #--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-def get_children(root):
+def get_dag_tree(root):
     '''
     '''
-    root = pm.PyNode(root)
+    root_pml_node = pm.PyNode(root)
+    iterator = OpenMaya.MItDag()
+    iterator.reset(root_pml_node.__apiobject__())
 
-    for c in root.getChildren() or []:
-        yield c
-
-        for _c in get_children(c):
-            yield _c
+    while not iterator.isDone():
+        yield iterator.item()
+        iterator.next()

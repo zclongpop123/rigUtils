@@ -130,7 +130,7 @@ def create_twist_rig(start_jnt, end_jnt, namespace='XXnamespaceXX', count=6, use
         pm.parentConstraint(start_jnt, twist_rig_grp)
         pm.parentConstraint(end_jnt,   aux_control,   mo=True)
     else:
-        pm.parentConstraint(pm.listRelatives(start_jnt, p=True, path=True), twist_rig_grp)
+        pm.parentConstraint(pm.listRelatives(start_jnt, p=True), twist_rig_grp)
 
     pm.parent(tws_joints[0], nro_joints[0], use_aux and aux_joints[0] or None,
               tws_ikhandl,   nro_ikhandl,   use_aux and aux_ikhandl   or None,
