@@ -27,15 +27,33 @@ def make_switch_joints(root):
 
 
 
+def __make_switch_constraint(sk_root, fk_root, ik_root, typ):
+    '''
+    '''
+    functions = {'pointConstraint':pm.pointConstraint, 'orientConstraint':pm.orientConstraint, 'scaleConstraint':pm.scaleConstraint}
+
+    for attr in ('fk', 'ik'):
+        if not pm.hasAttr(sk_root, attr):
+            pm.addAttr(sk_root, ln=attr, min=0, max=1, dv=0, k=True)
+
+    for sk, fk, ik in zip(dag.get_dag_tree(sk_root), dag.get_dag_tree(fk_root), dag.get_dag_tree(ik_root)):
+        constraint_node = functions[typ](OpenMaya.MFnDagNode(fk).fullPathName(),
+                                         OpenMaya.MFnDagNode(ik).fullPathName(),
+                                         OpenMaya.MFnDagNode(sk).fullPathName())
+
+        pm.PyNode(sk_root).fk >> constraint_node.listAttr(ud=True)[0]
+        pm.PyNode(sk_root).ik >> constraint_node.listAttr(ud=True)[1]
+
+    return True
+
+
+
+
+
 def make_position_switch(sk_root, fk_root, ik_root):
     '''
     '''
-    for sk, fk, ik in zip(dag.get_dag_tree(sk_root), dag.get_dag_tree(fk_root), dag.get_dag_tree(ik_root)):
-        pm.pointConstraint(OpenMaya.MFnDagNode(fk).fullPathName(),
-                           OpenMaya.MFnDagNode(ik).fullPathName(),
-                           OpenMaya.MFnDagNode(sk).fullPathName())
-
-    return True
+    return __make_switch_constraint(sk_root, fk_root, ik_root, 'pointConstraint')
 
 
 
@@ -44,12 +62,8 @@ def make_position_switch(sk_root, fk_root, ik_root):
 def make_orient_switch(sk_root, fk_root, ik_root):
     '''
     '''
-    for sk, fk, ik in zip(dag.get_dag_tree(sk_root), dag.get_dag_tree(fk_root), dag.get_dag_tree(ik_root)):
-        pm.orientConstraint(OpenMaya.MFnDagNode(fk).fullPathName(),
-                            OpenMaya.MFnDagNode(ik).fullPathName(),
-                            OpenMaya.MFnDagNode(sk).fullPathName())
+    return __make_switch_constraint(sk_root, fk_root, ik_root, 'orientConstraint')
 
-    return True
 
 
 
@@ -57,9 +71,4 @@ def make_orient_switch(sk_root, fk_root, ik_root):
 def make_scale_switch(sk_root, fk_root, ik_root):
     '''
     '''
-    for sk, fk, ik in zip(dag.get_dag_tree(sk_root), dag.get_dag_tree(fk_root), dag.get_dag_tree(ik_root)):
-        pm.scaleConstraint(OpenMaya.MFnDagNode(fk).fullPathName(),
-                           OpenMaya.MFnDagNode(ik).fullPathName(),
-                           OpenMaya.MFnDagNode(sk).fullPathName())
-
-    return True
+    return __make_switch_constraint(sk_root, fk_root, ik_root, 'scaleConstraint')
