@@ -12,5 +12,8 @@ def clear_all_namespace():
     namespaces = mc.namespaceInfo(listOnlyNamespaces=True, recurse=True)
     namespaces.remove('UI')
     namespaces.remove('shared')
+    namespaces.sort(key=lambda x:len(x))
+    namespaces.reverse()
+
     while namespaces:
         mc.namespace(rm=namespaces.pop(0), mnr=True)
